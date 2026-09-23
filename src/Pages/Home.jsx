@@ -171,9 +171,7 @@ function Home() {
     event.preventDefault();
 
     if (!customerName.trim() || !tableNumber.trim()) {
-      setOrderError(
-        "Please enter your name and table number."
-      );
+      setOrderError("Please enter your name and table number.");
       return;
     }
 
@@ -185,20 +183,19 @@ function Home() {
     setIsSubmitting(true);
     setOrderError("");
 
-    const generatedOrderNumber = `BB-${Date.now()
-      .toString()
-      .slice(-8)}`;
+    try {
+      const generatedOrderNumber = `BB-${Date.now()
+        .toString()
+        .slice(-8)}`;
 
-    const orderItems = cart.map((item) => ({
-      id: item.id,
-      name: item.name,
-      price: item.price,
-      quantity: item.quantity,
-    }));
+      const orderItems = cart.map((item) => ({
+        id: item.id,
+        name: item.name,
+        price: item.price,
+        quantity: item.quantity,
+      }));
 
-    const { data, error } = await supabase
-      .from("orders")
-      .insert({
+      const orderPayload = {
         order_number: generatedOrderNumber,
         customer_name: customerName.trim(),
         table_number: tableNumber.trim(),
@@ -206,42 +203,55 @@ function Home() {
         total: cartTotal,
         note: orderNote.trim() || null,
         status: "Order Received",
-      })
-      .select()
-      .single();
+      };
 
-    if (error) {
-      console.error("Supabase order error:", error);
+      console.log("Submitting order:", orderPayload);
 
-      setOrderError(
-        "Failed to place your order. Please try again."
+      const { error } = await supabase
+        .from("orders")
+        .insert(orderPayload);
+
+      if (error) {
+        console.error("Supabase order error:", error);
+
+        setOrderError(
+          error.message ||
+            "Failed to place your order. Please try again."
+        );
+
+        return;
+      }
+
+      console.log(
+        "Order successfully saved:",
+        generatedOrderNumber
       );
 
+      setOrderNumber(generatedOrderNumber);
+
+      localStorage.setItem(
+        "brewBloomCurrentOrder",
+        JSON.stringify({
+          orderNumber: generatedOrderNumber,
+          customerName: customerName.trim(),
+          tableNumber: tableNumber.trim(),
+          status: "Order Received",
+          total: cartTotal,
+          createdAt: new Date().toISOString(),
+        })
+      );
+
+      setSubmitted(true);
+    } catch (error) {
+      console.error("Unexpected order error:", error);
+
+      setOrderError(
+        error?.message ||
+          "Failed to place your order. Please try again."
+      );
+    } finally {
       setIsSubmitting(false);
-      return;
     }
-
-    console.log("Order successfully saved:", data);
-
-    setOrderNumber(data.order_number);
-
-    // Save current order locally so we can use it
-    // later for customer order tracking.
-    localStorage.setItem(
-      "brewBloomCurrentOrder",
-      JSON.stringify({
-        id: data.id,
-        orderNumber: data.order_number,
-        customerName: data.customer_name,
-        tableNumber: data.table_number,
-        status: data.status,
-        total: Number(data.total),
-        createdAt: data.created_at,
-      })
-    );
-
-    setSubmitted(true);
-    setIsSubmitting(false);
   };
 
   const startNewOrder = () => {
