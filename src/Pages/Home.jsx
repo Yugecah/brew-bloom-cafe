@@ -160,7 +160,9 @@ function Home() {
   };
 
   const closeCart = () => {
-    setCartOpen(false);
+    if (!isSubmitting) {
+      setCartOpen(false);
+    }
   };
 
   // =====================================================
@@ -170,8 +172,19 @@ function Home() {
   const handleSubmit = async (event) => {
     event.preventDefault();
 
-    if (!customerName.trim() || !tableNumber.trim()) {
-      setOrderError("Please enter your name and table number.");
+    if (isSubmitting) {
+      return;
+    }
+
+    setOrderError("");
+
+    if (!customerName.trim()) {
+      setOrderError("Please enter your name.");
+      return;
+    }
+
+    if (!tableNumber.trim()) {
+      setOrderError("Please enter your table number.");
       return;
     }
 
@@ -181,35 +194,34 @@ function Home() {
     }
 
     setIsSubmitting(true);
-    setOrderError("");
+
+    const generatedOrderNumber = `BB-${Date.now()
+      .toString()
+      .slice(-8)}`;
+
+    const orderItems = cart.map((item) => ({
+      id: item.id,
+      name: item.name,
+      price: Number(item.price),
+      quantity: Number(item.quantity),
+    }));
+
+    const orderData = {
+      order_number: generatedOrderNumber,
+      customer_name: customerName.trim(),
+      table_number: tableNumber.trim(),
+      items: orderItems,
+      total: Number(cartTotal),
+      note: orderNote.trim() || null,
+      status: "Order Received",
+    };
 
     try {
-      const generatedOrderNumber = `BB-${Date.now()
-        .toString()
-        .slice(-8)}`;
-
-      const orderItems = cart.map((item) => ({
-        id: item.id,
-        name: item.name,
-        price: item.price,
-        quantity: item.quantity,
-      }));
-
-      const orderPayload = {
-        order_number: generatedOrderNumber,
-        customer_name: customerName.trim(),
-        table_number: tableNumber.trim(),
-        items: orderItems,
-        total: cartTotal,
-        note: orderNote.trim() || null,
-        status: "Order Received",
-      };
-
-      console.log("Submitting order:", orderPayload);
+      console.log("Submitting Brew & Bloom order:", orderData);
 
       const { error } = await supabase
         .from("orders")
-        .insert(orderPayload);
+        .insert([orderData]);
 
       if (error) {
         console.error("Supabase order error:", error);
@@ -219,6 +231,7 @@ function Home() {
             "Failed to place your order. Please try again."
         );
 
+        setIsSubmitting(false);
         return;
       }
 
@@ -227,29 +240,34 @@ function Home() {
         generatedOrderNumber
       );
 
-      setOrderNumber(generatedOrderNumber);
+      // Save order locally
+      const localOrder = {
+        orderNumber: generatedOrderNumber,
+        customerName: customerName.trim(),
+        tableNumber: tableNumber.trim(),
+        status: "Order Received",
+        total: Number(cartTotal),
+        createdAt: new Date().toISOString(),
+      };
 
       localStorage.setItem(
         "brewBloomCurrentOrder",
-        JSON.stringify({
-          orderNumber: generatedOrderNumber,
-          customerName: customerName.trim(),
-          tableNumber: tableNumber.trim(),
-          status: "Order Received",
-          total: cartTotal,
-          createdAt: new Date().toISOString(),
-        })
+        JSON.stringify(localOrder)
       );
 
+      // Show success screen
+      setOrderNumber(generatedOrderNumber);
       setSubmitted(true);
+      setOrderError("");
+      setIsSubmitting(false);
     } catch (error) {
       console.error("Unexpected order error:", error);
 
       setOrderError(
         error?.message ||
-          "Failed to place your order. Please try again."
+          "Failed to connect to the ordering system. Please try again."
       );
-    } finally {
+
       setIsSubmitting(false);
     }
   };
@@ -833,6 +851,7 @@ function Home() {
                         setCustomerName(event.target.value)
                       }
                       placeholder="Enter your name"
+                      autoComplete="name"
                       required
                     />
                   </div>
